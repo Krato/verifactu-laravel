@@ -1,0 +1,75 @@
+<?php
+
+namespace App\Verifactu;
+
+use Krato\Verifactu\Contracts\InvoiceRecord as InvoiceRecordContract;
+use Krato\Verifactu\DTOs\InvoiceIdentifier;
+use Krato\Verifactu\DTOs\Issuer;
+use Krato\Verifactu\DTOs\Recipient;
+use Krato\Verifactu\DTOs\TaxBreakdown;
+use Krato\Verifactu\Enums\InvoiceType;
+use Krato\Verifactu\Enums\TaxRegime;
+use Krato\Verifactu\Enums\TaxType;
+
+class InvoiceRecord implements InvoiceRecordContract
+{
+    public function __construct(
+        private readonly \App\Models\Invoice $invoice,
+    ) {}
+
+    public function getIdentifier(): InvoiceIdentifier
+    {
+        return new InvoiceIdentifier(
+            series: $this->invoice->series,
+            number: $this->invoice->number,
+            issueDate: $this->invoice->issue_date,
+        );
+    }
+
+    public function getIssuer(): Issuer
+    {
+        return new Issuer(
+            nif: config('verifactu.sif.nif'),
+            name: config('verifactu.sif.name'),
+        );
+    }
+
+    public function getRecipient(): ?Recipient
+    {
+        return new Recipient(
+            nif: $this->invoice->customer->nif,
+            name: $this->invoice->customer->name,
+        );
+    }
+
+    public function getInvoiceType(): InvoiceType
+    {
+        return InvoiceType::F1;
+    }
+
+    public function getDescription(): string
+    {
+        return $this->invoice->description ?? 'Factura';
+    }
+
+    public function getTaxBreakdowns(): array
+    {
+        return $this->invoice->lines->map(fn ($line) => new TaxBreakdown(
+            taxType: TaxType::IVA,
+            taxRegime: TaxRegime::General,
+            taxBase: $line->base_amount,
+            taxRate: $line->tax_rate,
+            taxAmount: $line->tax_amount,
+        ))->all();
+    }
+
+    public function getTotalAmount(): float
+    {
+        return $this->invoice->total;
+    }
+
+    public function getIssueDate(): \DateTimeInterface
+    {
+        return $this->invoice->issue_date;
+    }
+}

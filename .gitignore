@@ -1,0 +1,10 @@
+/vendor
+/.phpunit.cache
+/build
+.phpunit.result.cache
+composer.lock
+phpstan.neon
+phpunit.xml
+.env
+*.p12
+*.pfx

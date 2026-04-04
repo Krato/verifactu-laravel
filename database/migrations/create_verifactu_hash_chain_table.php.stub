@@ -1,0 +1,31 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('verifactu_hash_chain', function (Blueprint $table) {
+            $table->id();
+            $table->string('nif', 20)->index();
+            $table->string('series', 20)->index();
+            $table->string('invoice_number', 60);
+            $table->date('invoice_date');
+            $table->string('hash', 64);
+            $table->string('previous_hash', 64)->nullable();
+            $table->json('metadata')->nullable();
+            $table->timestamps();
+
+            $table->unique(['nif', 'series', 'invoice_number', 'invoice_date'], 'verifactu_chain_unique');
+            $table->index(['nif', 'series', 'created_at'], 'verifactu_chain_lookup');
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('verifactu_hash_chain');
+    }
+};

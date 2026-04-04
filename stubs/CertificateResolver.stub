@@ -1,0 +1,20 @@
+<?php
+
+namespace App\Verifactu;
+
+use Krato\Verifactu\Contracts\CertificateResolver as CertificateResolverContract;
+use Krato\Verifactu\DTOs\CertificateCredentials;
+
+class CertificateResolver implements CertificateResolverContract
+{
+    public function resolve(string $nif): CertificateCredentials
+    {
+        // Example: resolve from database for multi-tenant
+        // $tenant = \App\Models\Tenant::where('nif', $nif)->firstOrFail();
+
+        return new CertificateCredentials(
+            path: config('verifactu.certificate.path'),
+            password: config('verifactu.certificate.password'),
+        );
+    }
+}
