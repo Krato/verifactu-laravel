@@ -2,9 +2,9 @@ name: Laravel
 
 on:
   push:
-    branches: [ "claude/verifactu-laravel-v01-hxPGi" ]
+    branches: [ "main" ]
   pull_request:
-    branches: [ "claude/verifactu-laravel-v01-hxPGi" ]
+    branches: [ "main ]
 
 jobs:
   laravel-tests:
