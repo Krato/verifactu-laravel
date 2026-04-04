@@ -23,10 +23,10 @@ return [
     |
     */
     'sif' => [
-        'name'    => env('VERIFACTU_SIF_NAME', 'Mi Software'),
-        'nif'     => env('VERIFACTU_SIF_NIF'),
+        'name' => env('VERIFACTU_SIF_NAME', 'Mi Software'),
+        'nif' => env('VERIFACTU_SIF_NIF'),
         'version' => env('VERIFACTU_SIF_VERSION', '1.0.0'),
-        'id'      => env('VERIFACTU_SIF_ID'),
+        'id' => env('VERIFACTU_SIF_ID'),
     ],
 
     /*
@@ -39,7 +39,7 @@ return [
     |
     */
     'certificate' => [
-        'path'     => env('VERIFACTU_CERT_PATH'),
+        'path' => env('VERIFACTU_CERT_PATH'),
         'password' => env('VERIFACTU_CERT_PASSWORD'),
     ],
 
@@ -49,9 +49,9 @@ return [
     |--------------------------------------------------------------------------
     */
     'queue' => [
-        'enabled'    => env('VERIFACTU_QUEUE_ENABLED', true),
+        'enabled' => env('VERIFACTU_QUEUE_ENABLED', true),
         'connection' => env('VERIFACTU_QUEUE_CONNECTION', 'default'),
-        'queue'      => env('VERIFACTU_QUEUE_NAME', 'verifactu'),
+        'queue' => env('VERIFACTU_QUEUE_NAME', 'verifactu'),
     ],
 
     /*
@@ -61,7 +61,7 @@ return [
     */
     'retry' => [
         'max_attempts' => env('VERIFACTU_RETRY_MAX', 3),
-        'backoff'      => [60, 300, 900],
+        'backoff' => [60, 300, 900],
     ],
 
     /*
@@ -73,7 +73,7 @@ return [
     |
     */
     'bindings' => [
-        'hash_chain_store'  => DatabaseHashChainStore::class,
-        'submission_store'  => DatabaseSubmissionStore::class,
+        'hash_chain_store' => DatabaseHashChainStore::class,
+        'submission_store' => DatabaseSubmissionStore::class,
     ],
 ];

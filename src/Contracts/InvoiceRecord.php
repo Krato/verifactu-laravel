@@ -5,6 +5,7 @@ namespace Krato\Verifactu\Contracts;
 use Krato\Verifactu\DTOs\InvoiceIdentifier;
 use Krato\Verifactu\DTOs\Issuer;
 use Krato\Verifactu\DTOs\Recipient;
+use Krato\Verifactu\DTOs\TaxBreakdown;
 use Krato\Verifactu\Enums\InvoiceType;
 
 interface InvoiceRecord
@@ -19,7 +20,7 @@ interface InvoiceRecord
 
     public function getDescription(): string;
 
-    /** @return \Krato\Verifactu\DTOs\TaxBreakdown[] */
+    /** @return TaxBreakdown[] */
     public function getTaxBreakdowns(): array;
 
     public function getTotalAmount(): float;

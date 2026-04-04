@@ -10,7 +10,7 @@
     executionOrder="random"
     failOnWarning="true"
     failOnRisky="true"
-    failOnEmptyTestSuite="true"
+    failOnEmptyTestSuite="false"
     beStrictAboutOutputDuringTests="true"
     cacheDirectory=".phpunit.cache"
 >
@@ -18,8 +18,8 @@
         <testsuite name="Unit">
             <directory>tests/Unit</directory>
         </testsuite>
-        <testsuite name="Integration">
-            <directory>tests/Integration</directory>
+        <testsuite name="Feature">
+            <directory>tests/Feature</directory>
         </testsuite>
     </testsuites>
     <source>

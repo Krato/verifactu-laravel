@@ -2,7 +2,6 @@
 
 namespace Krato\Verifactu\Contracts;
 
-use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Krato\Verifactu\DTOs\InvoiceIdentifier;
 use Krato\Verifactu\DTOs\SubmissionRecord;

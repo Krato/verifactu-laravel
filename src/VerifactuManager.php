@@ -7,6 +7,7 @@ use Krato\Verifactu\Contracts\HashChainStore;
 use Krato\Verifactu\Contracts\InvoiceRecord;
 use Krato\Verifactu\Contracts\SubmissionStore;
 use Krato\Verifactu\DTOs\CertificateCredentials;
+use Krato\Verifactu\DTOs\SubmissionError;
 use Krato\Verifactu\DTOs\SubmissionRecord;
 use Krato\Verifactu\DTOs\SubmissionResult;
 use Krato\Verifactu\Enums\RecordType;
@@ -91,7 +92,7 @@ class VerifactuManager
         } catch (\Throwable $e) {
             $failResult = new SubmissionResult(
                 status: SubmissionStatus::Failed,
-                errors: [new \Krato\Verifactu\DTOs\SubmissionError('TRANSPORT_ERROR', $e->getMessage())],
+                errors: [new SubmissionError('TRANSPORT_ERROR', $e->getMessage())],
             );
             $this->submissionStore->recordResponse($issuer->nif, $identifier, RecordType::Alta->value, $failResult);
 

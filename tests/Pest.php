@@ -2,4 +2,4 @@
 
 use Krato\Verifactu\Tests\TestCase;
 
-uses(TestCase::class)->in('Unit', 'Integration');
+uses(TestCase::class)->in('Feature', 'Unit');

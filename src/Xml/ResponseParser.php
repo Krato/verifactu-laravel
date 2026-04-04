@@ -20,6 +20,7 @@ class ResponseParser
         if (! $dom->loadXML($xmlResponse)) {
             libxml_clear_errors();
             libxml_use_internal_errors($previous);
+
             return new SubmissionResult(
                 status: SubmissionStatus::Failed,
                 xmlResponse: $xmlResponse,
