@@ -118,7 +118,16 @@ class VerifactuManager
         // 8. Record response
         $this->submissionStore->recordResponse($issuer->nif, $identifier, RecordType::Alta->value, $result);
 
-        // 9. Append hash to chain ONLY if accepted
+        // 9. If the response could not be parsed into a business outcome
+        //    (malformed XML, SOAP fault, unknown status), throw just like
+        //    a network error so retry logic works consistently.
+        if ($result->isTransportError()) {
+            $errorDesc = ! empty($result->errors) ? $result->errors[0]->description : 'Invalid AEAT response';
+
+            throw new SubmissionException('AEAT response error: '.$errorDesc, $result);
+        }
+
+        // 10. Append hash to chain ONLY if accepted
         if ($result->isAccepted()) {
             $chainManager->append($issuer->nif, $identifier->series, $chainLink);
         }

@@ -493,6 +493,29 @@ try {
 }
 ```
 
+### Semántica de errores
+
+`submit()` tiene dos tipos de resultado distintos:
+
+- **Resultados de negocio** (devueltos como `SubmissionResult`) — AEAT respondió con un estado de negocio válido: `Accepted`, `AcceptedWithErrors` o `Rejected`. Se manejan con el valor de retorno.
+- **Fallos de infraestructura** (lanzados como `SubmissionException`) — errores de red, respuestas malformadas, SOAP faults o cualquier respuesta que no pueda parsearse a un resultado de negocio. Todos llevan un `$result` con estado `TransportError`.
+
+```php
+try {
+    $result = Verifactu::submit($invoice);
+
+    if ($result->isAccepted()) {
+        // AEAT aceptó — $result->csv disponible
+    } elseif ($result->isRejected()) {
+        // AEAT rechazó — revisar $result->errors
+    }
+} catch (\Krato\Verifactu\Exceptions\SubmissionException $e) {
+    // Fallo de infraestructura (error de red, respuesta malformada, SOAP fault)
+    // $e->result->isTransportError() === true
+    // Seguro para reintentar
+}
+```
+
 ### Errores de transporte y reintentos
 
 Con `dispatch()` (por cola), solo los fallos de transporte se reintentan. Los rechazos AEAT y errores de validación fallan inmediatamente sin reintentos:

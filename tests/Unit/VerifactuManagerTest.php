@@ -2,6 +2,7 @@
 
 use Krato\Verifactu\Enums\SubmissionStatus;
 use Krato\Verifactu\Exceptions\DuplicateSubmissionException;
+use Krato\Verifactu\Exceptions\SubmissionException;
 use Krato\Verifactu\Exceptions\ValidationException;
 use Krato\Verifactu\Hash\HashGenerator;
 use Krato\Verifactu\Testing\FakeHashChainStore;
@@ -120,7 +121,7 @@ it('records submission with accepted status after successful send', function () 
         ->and($submissions[0]->status)->toBe(SubmissionStatus::Accepted);
 });
 
-// --- Rejected response => hash NOT appended ---
+// --- Rejected response => hash NOT appended, result returned ---
 
 it('does not append hash on rejected response', function () {
     $hashStore = new FakeHashChainStore;
@@ -161,9 +162,9 @@ XML);
     expect($submissions[0]->status)->toBe(SubmissionStatus::Rejected);
 });
 
-// --- Transport error behavior => hash NOT appended ---
+// --- Invalid response => exception thrown, hash NOT appended ---
 
-it('does not append hash on transport error', function () {
+it('throws SubmissionException on malformed response and does not append hash', function () {
     $hashStore = new FakeHashChainStore;
     $submissionStore = new FakeSubmissionStore;
     $manager = createManager($hashStore, $submissionStore);
@@ -174,17 +175,59 @@ it('does not append hash on transport error', function () {
     $invoice = pastInvoice()
         ->withIdentifier('FA', '001', new \DateTimeImmutable('2025-01-15'))
         ->withIssuer('B12345678', 'Test S.L.');
-    $result = $manager->submit($invoice);
 
-    // ResponseParser will parse it as TransportError (invalid XML)
-    expect($result->isTransportError())->toBeTrue();
+    try {
+        $manager->submit($invoice);
+        test()->fail('Expected SubmissionException');
+    } catch (SubmissionException $e) {
+        // The exception should carry the parsed result
+        expect($e->result)->not->toBeNull()
+            ->and($e->result->status)->toBe(SubmissionStatus::TransportError)
+            ->and($e->result->errors[0]->code)->toBe('PARSE_ERROR');
+    }
 
     // Hash chain must be empty
     $chain = $hashStore->getChain('B12345678', 'FA');
     expect($chain)->toBeEmpty();
 
+    // Submission status should be recorded as TransportError
     $submissions = $submissionStore->all();
     expect($submissions[0]->status)->toBe(SubmissionStatus::TransportError);
+});
+
+it('throws SubmissionException on SOAP fault and does not append hash', function () {
+    $hashStore = new FakeHashChainStore;
+    $submissionStore = new FakeSubmissionStore;
+    $manager = createManager($hashStore, $submissionStore);
+
+    $fake = $manager->fake();
+    $fake->respondWith(<<<'XML'
+<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
+    <soapenv:Body>
+        <soapenv:Fault>
+            <faultcode>Server</faultcode>
+            <faultstring>Internal Server Error</faultstring>
+        </soapenv:Fault>
+    </soapenv:Body>
+</soapenv:Envelope>
+XML);
+
+    $invoice = pastInvoice()
+        ->withIdentifier('FA', '001', new \DateTimeImmutable('2025-01-15'))
+        ->withIssuer('B12345678', 'Test S.L.');
+
+    try {
+        $manager->submit($invoice);
+        test()->fail('Expected SubmissionException');
+    } catch (SubmissionException $e) {
+        expect($e->result)->not->toBeNull()
+            ->and($e->result->status)->toBe(SubmissionStatus::TransportError)
+            ->and($e->result->errors[0]->code)->toBe('SOAP_FAULT');
+    }
+
+    $chain = $hashStore->getChain('B12345678', 'FA');
+    expect($chain)->toBeEmpty();
 });
 
 // --- Duplicate submission prevention ---
@@ -206,7 +249,7 @@ it('prevents duplicate submission of already accepted invoice', function () {
     $manager->submit($invoice);
 })->throws(DuplicateSubmissionException::class, 'already been accepted');
 
-it('allows resubmission after transport error', function () {
+it('allows resubmission after invalid response', function () {
     $submissionStore = new FakeSubmissionStore;
     $hashStore = new FakeHashChainStore;
     $manager = createManager($hashStore, $submissionStore);
@@ -217,10 +260,14 @@ it('allows resubmission after transport error', function () {
         ->withIdentifier('FA', '002', new \DateTimeImmutable('2025-01-15'))
         ->withIssuer('B12345678', 'Test S.L.');
 
-    // First attempt: transport error (invalid XML response)
+    // First attempt: malformed response → SubmissionException
     $fake->respondWith('not-xml');
-    $result1 = $manager->submit($invoice);
-    expect($result1->isTransportError())->toBeTrue();
+    try {
+        $manager->submit($invoice);
+        test()->fail('Expected SubmissionException');
+    } catch (SubmissionException $e) {
+        expect($e->result->isTransportError())->toBeTrue();
+    }
 
     // Hash should NOT be in chain after transport error
     expect($hashStore->getChain('B12345678', 'FA'))->toBeEmpty();
