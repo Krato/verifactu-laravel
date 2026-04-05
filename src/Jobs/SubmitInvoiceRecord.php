@@ -36,43 +36,21 @@ class SubmitInvoiceRecord implements ShouldQueue
             ? $manager->forTenant($this->tenantNif)
             : $manager;
 
-        $target->submit($this->invoice);
-    }
+        try {
+            $target->submit($this->invoice);
+        } catch (ValidationException|DuplicateSubmissionException $e) {
+            // Non-retryable: fail immediately without exhausting retries
+            $this->fail($e);
+        } catch (SubmissionException $e) {
+            if ($e->result !== null && ! $e->result->isTransportError()) {
+                // AEAT functional rejection: do not retry
+                $this->fail($e);
 
-    /**
-     * Determine if the job should retry based on the exception type.
-     * Only transport/transient failures are retryable. Validation errors
-     * and AEAT functional rejections should not be retried.
-     */
-    public function shouldRetry(\Throwable $exception): bool
-    {
-        // Never retry validation failures
-        if ($exception instanceof ValidationException) {
-            return false;
-        }
+                return;
+            }
 
-        // Never retry duplicate submissions
-        if ($exception instanceof DuplicateSubmissionException) {
-            return false;
-        }
-
-        // Only retry transport errors (SubmissionException with transport error status)
-        if ($exception instanceof SubmissionException && $exception->result !== null) {
-            return $exception->result->isTransportError();
-        }
-
-        // Retry unexpected exceptions (likely transient)
-        return true;
-    }
-
-    /**
-     * Handle a job failure. Called when all retries are exhausted or shouldRetry returns false.
-     */
-    public function failed(\Throwable $exception): void
-    {
-        // Non-retryable exceptions should fail immediately without exhausting retries
-        if (! $this->shouldRetry($exception)) {
-            $this->fail($exception);
+            // Transport error: rethrow so Laravel retry/backoff applies
+            throw $e;
         }
     }
 

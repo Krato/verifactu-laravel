@@ -1,15 +1,11 @@
 <?php
 
-use Krato\Verifactu\DTOs\SubmissionError;
-use Krato\Verifactu\DTOs\SubmissionResult;
 use Krato\Verifactu\Enums\SubmissionStatus;
 use Krato\Verifactu\Exceptions\DuplicateSubmissionException;
-use Krato\Verifactu\Exceptions\SubmissionException;
 use Krato\Verifactu\Exceptions\ValidationException;
 use Krato\Verifactu\Hash\HashGenerator;
 use Krato\Verifactu\Testing\FakeHashChainStore;
 use Krato\Verifactu\Testing\FakeSubmissionStore;
-use Krato\Verifactu\Testing\FakeTransport;
 use Krato\Verifactu\Testing\InvoiceRecordFactory;
 use Krato\Verifactu\Transport\CertificateAuth;
 use Krato\Verifactu\Transport\Endpoints;
@@ -105,7 +101,7 @@ it('appends hash on accepted response', function () {
     expect($result->isAccepted())->toBeTrue()
         ->and($result->csv)->toBe('FAKE-CSV-001');
 
-    // Hash chain should have the entry
+    // Hash chain should have the entry (appended after acceptance)
     $chain = $hashStore->getChain('B12345678', 'FA');
     expect($chain)->toHaveCount(1)
         ->and($chain[0]->hash)->toHaveLength(64);
@@ -124,9 +120,9 @@ it('records submission with accepted status after successful send', function () 
         ->and($submissions[0]->status)->toBe(SubmissionStatus::Accepted);
 });
 
-// --- Rejected response => no hash append beyond the pre-send one ---
+// --- Rejected response => hash NOT appended ---
 
-it('records rejected status on rejected response', function () {
+it('does not append hash on rejected response', function () {
     $hashStore = new FakeHashChainStore;
     $submissionStore = new FakeSubmissionStore;
     $manager = createManager($hashStore, $submissionStore);
@@ -148,33 +144,44 @@ it('records rejected status on rejected response', function () {
 </soapenv:Envelope>
 XML);
 
-    $invoice = pastInvoice();
+    $invoice = pastInvoice()
+        ->withIdentifier('FA', '001', new \DateTimeImmutable('2025-01-15'))
+        ->withIssuer('B12345678', 'Test S.L.');
     $result = $manager->submit($invoice);
 
     expect($result->isRejected())->toBeTrue()
         ->and($result->errors)->toHaveCount(1)
         ->and($result->errors[0]->code)->toBe('4100');
 
+    // Hash chain must be empty — rejected submissions are NOT persisted
+    $chain = $hashStore->getChain('B12345678', 'FA');
+    expect($chain)->toBeEmpty();
+
     $submissions = $submissionStore->all();
     expect($submissions[0]->status)->toBe(SubmissionStatus::Rejected);
 });
 
-// --- Transport error behavior ---
+// --- Transport error behavior => hash NOT appended ---
 
-it('throws SubmissionException on transport error', function () {
+it('does not append hash on transport error', function () {
+    $hashStore = new FakeHashChainStore;
     $submissionStore = new FakeSubmissionStore;
-    $manager = createManager(submissionStore: $submissionStore);
+    $manager = createManager($hashStore, $submissionStore);
 
     $fake = $manager->fake();
-    // Simulate transport error by setting response to invalid data
-    // which causes the FakeTransport to throw
     $fake->respondWith('not-xml-response');
 
-    $invoice = pastInvoice();
+    $invoice = pastInvoice()
+        ->withIdentifier('FA', '001', new \DateTimeImmutable('2025-01-15'))
+        ->withIssuer('B12345678', 'Test S.L.');
     $result = $manager->submit($invoice);
 
     // ResponseParser will parse it as TransportError (invalid XML)
     expect($result->isTransportError())->toBeTrue();
+
+    // Hash chain must be empty
+    $chain = $hashStore->getChain('B12345678', 'FA');
+    expect($chain)->toBeEmpty();
 
     $submissions = $submissionStore->all();
     expect($submissions[0]->status)->toBe(SubmissionStatus::TransportError);
@@ -215,6 +222,9 @@ it('allows resubmission after transport error', function () {
     $result1 = $manager->submit($invoice);
     expect($result1->isTransportError())->toBeTrue();
 
+    // Hash should NOT be in chain after transport error
+    expect($hashStore->getChain('B12345678', 'FA'))->toBeEmpty();
+
     // Second attempt: success
     $fake->respondWith(<<<'XML'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -231,11 +241,15 @@ XML);
     $result2 = $manager->submit($invoice);
     expect($result2->isAccepted())->toBeTrue()
         ->and($result2->csv)->toBe('CSV-RETRY-001');
+
+    // Now the hash should be in the chain
+    expect($hashStore->getChain('B12345678', 'FA'))->toHaveCount(1);
 });
 
 it('allows resubmission after rejection', function () {
     $submissionStore = new FakeSubmissionStore;
-    $manager = createManager(submissionStore: $submissionStore);
+    $hashStore = new FakeHashChainStore;
+    $manager = createManager($hashStore, $submissionStore);
 
     $fake = $manager->fake();
 
@@ -258,6 +272,9 @@ XML);
     $result1 = $manager->submit($invoice);
     expect($result1->isRejected())->toBeTrue();
 
+    // Hash should NOT be in chain after rejection
+    expect($hashStore->getChain('B12345678', 'FA'))->toBeEmpty();
+
     // Second attempt: should be allowed (rejections are not duplicates)
     $fake->respondWith(<<<'XML'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -273,4 +290,7 @@ XML);
 
     $result2 = $manager->submit($invoice);
     expect($result2->isAccepted())->toBeTrue();
+
+    // Now the hash should be in the chain
+    expect($hashStore->getChain('B12345678', 'FA'))->toHaveCount(1);
 });

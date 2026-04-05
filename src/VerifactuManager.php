@@ -118,6 +118,11 @@ class VerifactuManager
         // 8. Record response
         $this->submissionStore->recordResponse($issuer->nif, $identifier, RecordType::Alta->value, $result);
 
+        // 9. Append hash to chain ONLY if accepted
+        if ($result->isAccepted()) {
+            $chainManager->append($issuer->nif, $identifier->series, $chainLink);
+        }
+
         return $result;
     }
 

@@ -17,6 +17,8 @@ class InvoiceRecordValidator
 
     private const MAX_SERIES_LENGTH = 20;
 
+    private const TOTAL_TOLERANCE = 0.01;
+
     /**
      * Validate an InvoiceRecord before submission. Throws on failure.
      *
@@ -41,8 +43,10 @@ class InvoiceRecordValidator
         $this->validateInvoiceType($invoice, $violations);
         $this->validateIdentifier($invoice, $violations);
         $this->validateIssuer($invoice, $violations);
+        $this->validateRecipient($invoice, $violations);
         $this->validateTaxBreakdowns($invoice, $violations);
         $this->validateTotalAmount($invoice, $violations);
+        $this->validateTotalConsistency($invoice, $violations);
         $this->validateIssueDate($invoice, $violations);
 
         return $violations;
@@ -97,6 +101,26 @@ class InvoiceRecordValidator
     /**
      * @param  string[]  &$violations
      */
+    private function validateRecipient(InvoiceRecord $invoice, array &$violations): void
+    {
+        $recipient = $invoice->getRecipient();
+
+        if ($recipient === null) {
+            return;
+        }
+
+        if (trim($recipient->nif) === '') {
+            $violations[] = 'Recipient NIF must not be empty when recipient is provided.';
+        }
+
+        if (trim($recipient->name) === '') {
+            $violations[] = 'Recipient name must not be empty when recipient is provided.';
+        }
+    }
+
+    /**
+     * @param  string[]  &$violations
+     */
     private function validateTaxBreakdowns(InvoiceRecord $invoice, array &$violations): void
     {
         $breakdowns = $invoice->getTaxBreakdowns();
@@ -145,14 +169,56 @@ class InvoiceRecordValidator
     /**
      * @param  string[]  &$violations
      */
+    private function validateTotalConsistency(InvoiceRecord $invoice, array &$violations): void
+    {
+        $breakdowns = $invoice->getTaxBreakdowns();
+
+        if (empty($breakdowns)) {
+            return;
+        }
+
+        $total = $invoice->getTotalAmount();
+
+        if (! is_finite($total)) {
+            return;
+        }
+
+        $computed = 0.0;
+        foreach ($breakdowns as $breakdown) {
+            if (! $breakdown instanceof TaxBreakdown) {
+                return;
+            }
+
+            $computed += $breakdown->taxBase + $breakdown->taxAmount;
+
+            if ($breakdown->surchargeAmount !== null) {
+                $computed += $breakdown->surchargeAmount;
+            }
+        }
+
+        if (abs($total - $computed) > self::TOTAL_TOLERANCE) {
+            $violations[] = sprintf(
+                'Total amount (%.2f) does not match the sum of tax breakdowns (%.2f). Difference exceeds tolerance of %.2f.',
+                $total,
+                $computed,
+                self::TOTAL_TOLERANCE,
+            );
+        }
+    }
+
+    /**
+     * @param  string[]  &$violations
+     */
     private function validateIssueDate(InvoiceRecord $invoice, array &$violations): void
     {
         $date = $invoice->getIssueDate();
         $identifierDate = $invoice->getIdentifier()->issueDate;
 
-        $now = new \DateTimeImmutable('tomorrow');
+        // Compare date-only (strip time component) against today
+        $today = new \DateTimeImmutable('today');
+        $issueDateOnly = new \DateTimeImmutable($date->format('Y-m-d'));
 
-        if ($date > $now) {
+        if ($issueDateOnly > $today) {
             $violations[] = 'Issue date must not be in the future.';
         }
 

@@ -434,7 +434,7 @@ v0.1 is the **submission core** — everything you need to register invoices wit
 
 - **Invoice registration** — Alta records for F1 (full) and F2 (simplified) invoices
 - **SHA-256 hash chaining** — Per AEAT specification, each record is chained to the previous one
-- **Pre-submit validation** — Invoice records are validated before any network call (NIF format, tax breakdowns, amounts, dates)
+- **Pre-submit validation** — Invoice records are validated before any network call (NIF format, recipient data, tax breakdowns, total consistency, dates)
 - **Idempotency guard** — Prevents accidental duplicate submissions of already-accepted invoices
 - **Synchronous and async submission** — `submit()` for immediate, `dispatch()` for queue-based
 - **Transport error handling** — Only transport/transient failures are retried; validation errors and AEAT rejections fail immediately
@@ -476,6 +476,8 @@ try {
 Common causes:
 - **Invalid NIF format** — Must be 9 characters (e.g. `B12345678`)
 - **Empty tax breakdowns** — At least one `TaxBreakdown` is required
+- **Total mismatch** — `getTotalAmount()` must equal the sum of `taxBase + taxAmount + surchargeAmount` across breakdowns (tolerance: 0.01)
+- **Empty recipient fields** — If a recipient is provided, both NIF and name are required
 - **Future issue date** — Issue date cannot be in the future
 - **Mismatched dates** — `getIssueDate()` and `getIdentifier()->issueDate` must match
 

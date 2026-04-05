@@ -1,7 +1,5 @@
 <?php
 
-use Krato\Verifactu\DTOs\InvoiceIdentifier;
-use Krato\Verifactu\DTOs\Issuer;
 use Krato\Verifactu\DTOs\TaxBreakdown;
 use Krato\Verifactu\Enums\InvoiceType;
 use Krato\Verifactu\Enums\TaxRegime;
@@ -22,7 +20,6 @@ it('passes validation for a valid invoice', function () {
 
     $validator->validate($invoice);
 
-    // No exception thrown
     expect(true)->toBeTrue();
 });
 
@@ -77,6 +74,29 @@ it('fails when issuer name is empty', function () {
     $validator->validate($invoice);
 })->throws(ValidationException::class, 'Issuer name must not be empty');
 
+it('fails when recipient NIF is empty', function () {
+    $validator = new InvoiceRecordValidator;
+    $invoice = validInvoice()->withRecipient('', 'Some Client');
+
+    $validator->validate($invoice);
+})->throws(ValidationException::class, 'Recipient NIF must not be empty');
+
+it('fails when recipient name is empty', function () {
+    $validator = new InvoiceRecordValidator;
+    $invoice = validInvoice()->withRecipient('A12345678', '');
+
+    $validator->validate($invoice);
+})->throws(ValidationException::class, 'Recipient name must not be empty');
+
+it('passes when recipient is null', function () {
+    $validator = new InvoiceRecordValidator;
+    $invoice = validInvoice()->withoutRecipient();
+
+    $validator->validate($invoice);
+
+    expect(true)->toBeTrue();
+});
+
 it('fails when tax breakdowns are empty', function () {
     $validator = new InvoiceRecordValidator;
     $invoice = validInvoice()->withTaxBreakdowns([]);
@@ -86,18 +106,22 @@ it('fails when tax breakdowns are empty', function () {
 
 it('fails when tax base is negative', function () {
     $validator = new InvoiceRecordValidator;
-    $invoice = validInvoice()->withTaxBreakdowns([
-        new TaxBreakdown(TaxType::IVA, TaxRegime::General, -100.00, 21.00, -21.00),
-    ]);
+    $invoice = validInvoice()
+        ->withTaxBreakdowns([
+            new TaxBreakdown(TaxType::IVA, TaxRegime::General, -100.00, 21.00, -21.00),
+        ])
+        ->withTotalAmount(-121.00);
 
     $validator->validate($invoice);
 })->throws(ValidationException::class, 'tax base must not be negative');
 
 it('fails when tax rate is out of range', function () {
     $validator = new InvoiceRecordValidator;
-    $invoice = validInvoice()->withTaxBreakdowns([
-        new TaxBreakdown(TaxType::IVA, TaxRegime::General, 100.00, 150.00, 150.00),
-    ]);
+    $invoice = validInvoice()
+        ->withTaxBreakdowns([
+            new TaxBreakdown(TaxType::IVA, TaxRegime::General, 100.00, 150.00, 150.00),
+        ])
+        ->withTotalAmount(250.00);
 
     $validator->validate($invoice);
 })->throws(ValidationException::class, 'tax rate must be between 0 and 100');
@@ -109,14 +133,51 @@ it('fails when total amount is negative', function () {
     $validator->validate($invoice);
 })->throws(ValidationException::class, 'Total amount must not be negative');
 
+it('fails when total does not match tax breakdown sum', function () {
+    $validator = new InvoiceRecordValidator;
+    $invoice = validInvoice()
+        ->withTaxBreakdowns([
+            new TaxBreakdown(TaxType::IVA, TaxRegime::General, 1000.00, 21.00, 210.00),
+        ])
+        ->withTotalAmount(9999.00);
+
+    $validator->validate($invoice);
+})->throws(ValidationException::class, 'Total amount (9999.00) does not match the sum of tax breakdowns (1210.00)');
+
+it('passes when total matches tax breakdown sum within tolerance', function () {
+    $validator = new InvoiceRecordValidator;
+    // 1000 + 210 = 1210, allow up to 0.01 tolerance
+    $invoice = validInvoice()
+        ->withTaxBreakdowns([
+            new TaxBreakdown(TaxType::IVA, TaxRegime::General, 1000.00, 21.00, 210.00),
+        ])
+        ->withTotalAmount(1210.01);
+
+    $validator->validate($invoice);
+
+    expect(true)->toBeTrue();
+});
+
 it('fails when issue date is in the future', function () {
     $validator = new InvoiceRecordValidator;
-    $futureDate = new DateTimeImmutable('+30 days');
+    // Use tomorrow explicitly to test the boundary
+    $tomorrow = new DateTimeImmutable('tomorrow');
     $invoice = InvoiceRecordFactory::make()
-        ->withIssueDate($futureDate);
+        ->withIssueDate($tomorrow);
 
     $validator->validate($invoice);
 })->throws(ValidationException::class, 'Issue date must not be in the future');
+
+it('passes when issue date is today', function () {
+    $validator = new InvoiceRecordValidator;
+    $today = new DateTimeImmutable('today');
+    $invoice = InvoiceRecordFactory::make()
+        ->withIssueDate($today);
+
+    $validator->validate($invoice);
+
+    expect(true)->toBeTrue();
+});
 
 it('fails when issue date and identifier date do not match', function () {
     $validator = new InvoiceRecordValidator;
@@ -124,8 +185,6 @@ it('fails when issue date and identifier date do not match', function () {
     $date2 = new DateTimeImmutable('2025-01-20');
 
     // Manually create an invoice where identifier date != issueDate
-    // withIdentifier sets the identifier date, but we need issueDate different
-    // The factory's withIssueDate also updates the identifier, so we build manually
     $invoice = new class($date1, $date2) implements \Krato\Verifactu\Contracts\InvoiceRecord {
         public function __construct(private \DateTimeInterface $identifierDate, private \DateTimeInterface $issueDate) {}
 

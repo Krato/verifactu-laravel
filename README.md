@@ -434,7 +434,7 @@ v0.1 es el **core de envío** — todo lo necesario para registrar facturas en A
 
 - **Registro de facturas** — Registros de alta para facturas F1 (completas) y F2 (simplificadas)
 - **Hash SHA-256 encadenado** — Según especificación AEAT, cada registro se encadena al anterior
-- **Validación pre-envío** — Los registros se validan antes de cualquier llamada de red (formato NIF, desgloses, importes, fechas)
+- **Validación pre-envío** — Los registros se validan antes de cualquier llamada de red (formato NIF, datos destinatario, desgloses, consistencia de totales, fechas)
 - **Protección de idempotencia** — Previene envíos duplicados accidentales de facturas ya aceptadas
 - **Envío síncrono y asíncrono** — `submit()` para inmediato, `dispatch()` para colas
 - **Gestión de errores de transporte** — Solo se reintentan fallos de transporte/transitorios; errores de validación y rechazos AEAT fallan inmediatamente
@@ -476,6 +476,8 @@ try {
 Causas comunes:
 - **Formato NIF inválido** — Debe tener 9 caracteres (ej. `B12345678`)
 - **Desgloses fiscales vacíos** — Se requiere al menos un `TaxBreakdown`
+- **Total inconsistente** — `getTotalAmount()` debe coincidir con la suma de `taxBase + taxAmount + surchargeAmount` de los desgloses (tolerancia: 0.01)
+- **Campos de destinatario vacíos** — Si se proporciona un destinatario, NIF y nombre son obligatorios
 - **Fecha de emisión futura** — La fecha no puede ser futura
 - **Fechas no coincidentes** — `getIssueDate()` y `getIdentifier()->issueDate` deben coincidir
 
