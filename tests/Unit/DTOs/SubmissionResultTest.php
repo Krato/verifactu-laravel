@@ -22,3 +22,11 @@ it('detects rejected status', function () {
     expect($result->isRejected())->toBeTrue()
         ->and($result->isAccepted())->toBeFalse();
 });
+
+it('detects transport error status', function () {
+    $result = new SubmissionResult(SubmissionStatus::TransportError);
+
+    expect($result->isTransportError())->toBeTrue()
+        ->and($result->isAccepted())->toBeFalse()
+        ->and($result->isRejected())->toBeFalse();
+});

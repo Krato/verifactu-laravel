@@ -428,6 +428,88 @@ Your app → Verifactu::submit($invoice)
   → SubmissionResult returned
 ```
 
+## What v0.1 does today
+
+v0.1 is the **submission core** — everything you need to register invoices with AEAT:
+
+- **Invoice registration** — Alta records for F1 (full) and F2 (simplified) invoices
+- **SHA-256 hash chaining** — Per AEAT specification, each record is chained to the previous one
+- **Pre-submit validation** — Invoice records are validated before any network call (NIF format, tax breakdowns, amounts, dates)
+- **Idempotency guard** — Prevents accidental duplicate submissions of already-accepted invoices
+- **Synchronous and async submission** — `submit()` for immediate, `dispatch()` for queue-based
+- **Transport error handling** — Only transport/transient failures are retried; validation errors and AEAT rejections fail immediately
+- **Digital certificate auth** — PKCS#12 (.p12/.pfx) certificate support
+- **Full persistence** — Requests, responses, hash chain, and submission status are all stored
+- **Multi-tenant** — `forTenant($nif)` for SaaS applications
+- **Testing helpers** — `FakeTransport`, `FakeSubmissionStore`, `InvoiceRecordFactory`
+
+## What v0.1 does NOT do yet
+
+These features are planned for future versions:
+
+- **Corrective invoices** (R1-R5) — v0.2
+- **Cancellations** (anulaciones) — v0.2
+- **QR code generation** — v0.2
+- **Laravel events** (InvoiceSubmitted, InvoiceAccepted, etc.) — v0.2
+- **Query API** against AEAT — v0.3
+- **Cross-referencing audit** — v0.3
+- **Operational CLI commands** — v0.3
+- **Data export** — v0.3
+
+## Troubleshooting
+
+### "Invoice record validation failed"
+
+The package validates all invoice data before sending. Check the exception's `violations` array for specific issues:
+
+```php
+try {
+    Verifactu::submit($invoice);
+} catch (\Krato\Verifactu\Exceptions\ValidationException $e) {
+    // $e->violations contains an array of human-readable error messages
+    foreach ($e->violations as $violation) {
+        logger()->error($violation);
+    }
+}
+```
+
+Common causes:
+- **Invalid NIF format** — Must be 9 characters (e.g. `B12345678`)
+- **Empty tax breakdowns** — At least one `TaxBreakdown` is required
+- **Future issue date** — Issue date cannot be in the future
+- **Mismatched dates** — `getIssueDate()` and `getIdentifier()->issueDate` must match
+
+### "Duplicate submission prevented"
+
+The package blocks re-sending an invoice that was already accepted by AEAT. This is intentional. If you need to correct an invoice, rectifications will be available in v0.2.
+
+```php
+try {
+    Verifactu::submit($invoice);
+} catch (\Krato\Verifactu\Exceptions\DuplicateSubmissionException $e) {
+    // This invoice was already accepted — no action needed
+}
+```
+
+### Transport errors and retries
+
+When using `dispatch()` (queue-based), only transport failures are retried. AEAT rejections and validation errors fail immediately without retrying:
+
+```php
+// Configure retries in config/verifactu.php
+'retry' => [
+    'max_attempts' => 3,
+    'backoff' => [60, 300, 900], // seconds between retries
+],
+```
+
+### Certificate errors
+
+- Ensure your `.p12`/`.pfx` file path is absolute
+- Verify the password is correct
+- Check that the `openssl` PHP extension is installed
+- For multi-tenant setups, implement `CertificateResolver`
+
 ## Roadmap
 
 ### v0.1 — Submission core (current)

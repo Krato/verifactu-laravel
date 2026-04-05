@@ -12,6 +12,7 @@ use Krato\Verifactu\DTOs\SubmissionRecord;
 use Krato\Verifactu\DTOs\SubmissionResult;
 use Krato\Verifactu\Enums\RecordType;
 use Krato\Verifactu\Enums\SubmissionStatus;
+use Krato\Verifactu\Exceptions\DuplicateSubmissionException;
 use Krato\Verifactu\Exceptions\SubmissionException;
 use Krato\Verifactu\Hash\ChainManager;
 use Krato\Verifactu\Hash\HashGenerator;
@@ -20,6 +21,7 @@ use Krato\Verifactu\Testing\FakeTransport;
 use Krato\Verifactu\Transport\CertificateAuth;
 use Krato\Verifactu\Transport\Endpoints;
 use Krato\Verifactu\Transport\SoapClient;
+use Krato\Verifactu\Validation\InvoiceRecordValidator;
 use Krato\Verifactu\Xml\RecordBuilder;
 use Krato\Verifactu\Xml\ResponseParser;
 use Krato\Verifactu\Xml\SubmissionEnvelope;
@@ -47,9 +49,20 @@ class VerifactuManager
 
     /**
      * Submit an invoice record synchronously to AEAT.
+     *
+     * @throws \Krato\Verifactu\Exceptions\ValidationException
+     * @throws DuplicateSubmissionException
+     * @throws SubmissionException
      */
     public function submit(InvoiceRecord $invoice): SubmissionResult
     {
+        // 0. Validate the invoice record before doing anything
+        $validator = new InvoiceRecordValidator;
+        $validator->validate($invoice);
+
+        // 0b. Idempotency: prevent re-sending already accepted invoices
+        $this->guardAgainstDuplicate($invoice);
+
         $chainManager = new ChainManager($this->hashGenerator, $this->hashChainStore);
 
         // 1. Generate hash chain
@@ -65,7 +78,7 @@ class VerifactuManager
         $issuer = $invoice->getIssuer();
         $soapXml = $this->submissionEnvelope->wrap($recordXml, $issuer->nif, $issuer->name);
 
-        // 5. Record submission BEFORE sending
+        // 5. Record submission BEFORE sending (status: Sending)
         $identifier = $invoice->getIdentifier();
         $submissionRecord = new SubmissionRecord(
             nif: $issuer->nif,
@@ -74,7 +87,7 @@ class VerifactuManager
             invoiceType: $invoice->getInvoiceType(),
             xmlRequest: $soapXml,
             hash: $chainLink->hash,
-            status: SubmissionStatus::Submitted,
+            status: SubmissionStatus::Sending,
             submittedAt: new \DateTimeImmutable,
             tenantId: $this->tenantNif,
         );
@@ -91,7 +104,7 @@ class VerifactuManager
             }
         } catch (\Throwable $e) {
             $failResult = new SubmissionResult(
-                status: SubmissionStatus::Failed,
+                status: SubmissionStatus::TransportError,
                 errors: [new SubmissionError('TRANSPORT_ERROR', $e->getMessage())],
             );
             $this->submissionStore->recordResponse($issuer->nif, $identifier, RecordType::Alta->value, $failResult);
@@ -171,6 +184,35 @@ class VerifactuManager
         }
 
         $this->fakeTransport->assertSubmittedCount($count);
+    }
+
+    /**
+     * Check if an accepted submission already exists for this invoice identity and record type.
+     *
+     * @throws DuplicateSubmissionException
+     */
+    private function guardAgainstDuplicate(InvoiceRecord $invoice): void
+    {
+        $issuer = $invoice->getIssuer();
+        $identifier = $invoice->getIdentifier();
+
+        $existing = $this->submissionStore->getLastSubmission($issuer->nif, $identifier);
+
+        if ($existing === null) {
+            return;
+        }
+
+        $isAccepted = in_array($existing->status, [
+            SubmissionStatus::Accepted,
+            SubmissionStatus::AcceptedWithErrors,
+        ], true);
+
+        if ($isAccepted && $existing->recordType === RecordType::Alta) {
+            throw new DuplicateSubmissionException(
+                $identifier->fullNumber(),
+                RecordType::Alta->value,
+            );
+        }
     }
 
     private function resolveCertificate(string $nif): CertificateCredentials

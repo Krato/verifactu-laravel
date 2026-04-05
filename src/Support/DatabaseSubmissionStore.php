@@ -101,7 +101,7 @@ class DatabaseSubmissionStore implements SubmissionStore
     public function getPendingRetries(): Collection
     {
         return DB::table('verifactu_submissions')
-            ->where('status', SubmissionStatus::Failed->value)
+            ->where('status', SubmissionStatus::TransportError->value)
             ->where('attempt_count', '<', config('verifactu.retry.max_attempts', 3))
             ->where(function ($query) {
                 $query->whereNull('next_retry_at')

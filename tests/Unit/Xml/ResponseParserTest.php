@@ -68,7 +68,7 @@ XML;
 
     $result = $parser->parse($xml);
 
-    expect($result->status)->toBe(SubmissionStatus::Failed)
+    expect($result->status)->toBe(SubmissionStatus::TransportError)
         ->and($result->errors)->toHaveCount(1)
         ->and($result->errors[0]->code)->toBe('SOAP_FAULT');
 });
@@ -78,7 +78,7 @@ it('handles invalid XML', function () {
 
     $result = $parser->parse('not xml at all');
 
-    expect($result->status)->toBe(SubmissionStatus::Failed)
+    expect($result->status)->toBe(SubmissionStatus::TransportError)
         ->and($result->errors)->toHaveCount(1)
         ->and($result->errors[0]->code)->toBe('PARSE_ERROR');
 });

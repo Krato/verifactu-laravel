@@ -22,7 +22,7 @@ class ResponseParser
             libxml_use_internal_errors($previous);
 
             return new SubmissionResult(
-                status: SubmissionStatus::Failed,
+                status: SubmissionStatus::TransportError,
                 xmlResponse: $xmlResponse,
                 errors: [new SubmissionError('PARSE_ERROR', 'Could not parse XML response')],
             );
@@ -40,7 +40,7 @@ class ResponseParser
             $faultString = $this->getNodeValue($xpath, '//env:Fault/faultstring') ?? 'Unknown SOAP fault';
 
             return new SubmissionResult(
-                status: SubmissionStatus::Failed,
+                status: SubmissionStatus::TransportError,
                 xmlResponse: $xmlResponse,
                 errors: [new SubmissionError('SOAP_FAULT', $faultString)],
             );
@@ -67,7 +67,7 @@ class ResponseParser
             'Correcto' => SubmissionStatus::Accepted,
             'AceptadoConErrores' => SubmissionStatus::AcceptedWithErrors,
             'Incorrecto' => SubmissionStatus::Rejected,
-            default => SubmissionStatus::Failed,
+            default => SubmissionStatus::TransportError,
         };
     }
 

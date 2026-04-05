@@ -428,6 +428,88 @@ Tu app → Verifactu::submit($invoice)
   → SubmissionResult devuelto
 ```
 
+## Qué hace v0.1 hoy
+
+v0.1 es el **core de envío** — todo lo necesario para registrar facturas en AEAT:
+
+- **Registro de facturas** — Registros de alta para facturas F1 (completas) y F2 (simplificadas)
+- **Hash SHA-256 encadenado** — Según especificación AEAT, cada registro se encadena al anterior
+- **Validación pre-envío** — Los registros se validan antes de cualquier llamada de red (formato NIF, desgloses, importes, fechas)
+- **Protección de idempotencia** — Previene envíos duplicados accidentales de facturas ya aceptadas
+- **Envío síncrono y asíncrono** — `submit()` para inmediato, `dispatch()` para colas
+- **Gestión de errores de transporte** — Solo se reintentan fallos de transporte/transitorios; errores de validación y rechazos AEAT fallan inmediatamente
+- **Autenticación por certificado** — Soporte PKCS#12 (.p12/.pfx)
+- **Persistencia completa** — Requests, responses, cadena de hashes y estado de envío
+- **Multi-tenant** — `forTenant($nif)` para aplicaciones SaaS
+- **Testing helpers** — `FakeTransport`, `FakeSubmissionStore`, `InvoiceRecordFactory`
+
+## Qué NO hace v0.1 todavía
+
+Estas funcionalidades están planificadas para versiones futuras:
+
+- **Facturas rectificativas** (R1-R5) — v0.2
+- **Anulaciones** — v0.2
+- **Generación de QR** — v0.2
+- **Eventos Laravel** (InvoiceSubmitted, InvoiceAccepted, etc.) — v0.2
+- **Query API** contra AEAT — v0.3
+- **Auditoría cruzada** — v0.3
+- **Comandos CLI operativos** — v0.3
+- **Exportación de datos** — v0.3
+
+## Solución de problemas
+
+### "Invoice record validation failed"
+
+El paquete valida todos los datos de la factura antes de enviar. Revisa el array `violations` de la excepción:
+
+```php
+try {
+    Verifactu::submit($invoice);
+} catch (\Krato\Verifactu\Exceptions\ValidationException $e) {
+    // $e->violations contiene mensajes de error legibles
+    foreach ($e->violations as $violation) {
+        logger()->error($violation);
+    }
+}
+```
+
+Causas comunes:
+- **Formato NIF inválido** — Debe tener 9 caracteres (ej. `B12345678`)
+- **Desgloses fiscales vacíos** — Se requiere al menos un `TaxBreakdown`
+- **Fecha de emisión futura** — La fecha no puede ser futura
+- **Fechas no coincidentes** — `getIssueDate()` y `getIdentifier()->issueDate` deben coincidir
+
+### "Duplicate submission prevented"
+
+El paquete bloquea el reenvío de facturas ya aceptadas por AEAT. Es intencional. Si necesitas corregir una factura, las rectificativas estarán disponibles en v0.2.
+
+```php
+try {
+    Verifactu::submit($invoice);
+} catch (\Krato\Verifactu\Exceptions\DuplicateSubmissionException $e) {
+    // Esta factura ya fue aceptada — no se necesita acción
+}
+```
+
+### Errores de transporte y reintentos
+
+Con `dispatch()` (por cola), solo los fallos de transporte se reintentan. Los rechazos AEAT y errores de validación fallan inmediatamente sin reintentos:
+
+```php
+// Configura reintentos en config/verifactu.php
+'retry' => [
+    'max_attempts' => 3,
+    'backoff' => [60, 300, 900], // segundos entre reintentos
+],
+```
+
+### Errores de certificado
+
+- Asegúrate de que la ruta al archivo `.p12`/`.pfx` es absoluta
+- Verifica que la contraseña es correcta
+- Comprueba que la extensión `openssl` de PHP está instalada
+- Para configuraciones multi-tenant, implementa `CertificateResolver`
+
 ## Roadmap
 
 ### v0.1 — Core de envío (actual)
