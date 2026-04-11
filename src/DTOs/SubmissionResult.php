@@ -28,4 +28,9 @@ final readonly class SubmissionResult
     {
         return $this->status === SubmissionStatus::Rejected;
     }
+
+    public function isTransportError(): bool
+    {
+        return $this->status === SubmissionStatus::TransportError;
+    }
 }

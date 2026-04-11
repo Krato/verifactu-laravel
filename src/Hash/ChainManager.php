@@ -14,7 +14,8 @@ class ChainManager
     ) {}
 
     /**
-     * Generate the next hash in the chain for a given invoice and persist it.
+     * Generate the next hash in the chain for a given invoice.
+     * Does NOT persist the link — call append() after AEAT accepts.
      */
     public function chain(InvoiceRecord $invoice): HashChainLink
     {
@@ -27,7 +28,7 @@ class ChainManager
 
         $hash = $this->hashGenerator->generate($invoice, $previousHash, $hashTimestamp);
 
-        $link = new HashChainLink(
+        return new HashChainLink(
             invoiceNumber: $identifier->fullNumber(),
             invoiceDate: $identifier->issueDate,
             hash: $hash,
@@ -36,10 +37,14 @@ class ChainManager
                 'hash_timestamp' => $hashTimestamp->format('Y-m-d\TH:i:sP'),
             ],
         );
+    }
 
-        $this->store->append($issuer->nif, $series, $link);
-
-        return $link;
+    /**
+     * Persist a hash link to the chain store. Call only after AEAT acceptance.
+     */
+    public function append(string $nif, string $series, HashChainLink $link): void
+    {
+        $this->store->append($nif, $series, $link);
     }
 
     /**
